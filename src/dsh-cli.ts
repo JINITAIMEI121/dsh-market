@@ -147,6 +147,41 @@ export function proxyEnvForPnpm(env: NodeJS.ProcessEnv = process.env, region: Re
 }
 
 /**
+ * Environment that makes a spawned `git` fail fast instead of wait for a
+ * human who is not there (#587).
+ *
+ * pnpm shells out to a real `git clone` for git-hosted specs the codeload
+ * shortcut cannot serve — a `github:owner/repo#path:/subdir` install needs a
+ * checkout of the subdirectory, so it clones the whole repository. When that
+ * clone wants credentials (an SSH key passphrase, a host-key confirmation),
+ * git asks on a terminal it does not have and then waits forever: the hung
+ * install shows a live `git clone` at ~0% CPU until the market's install
+ * timeout finally kills it. The `CI` variable the spawn sets is pnpm's
+ * vocabulary, not git's — git reads only `GIT_TERMINAL_PROMPT`, and the SSH
+ * prompts behind a `git@github.com:...` URL answer to SSH itself.
+ *
+ * Same rule as `proxyEnvForPnpm`: fill silence, never overwrite speech. A
+ * caller who set either variable — `GIT_SSH_COMMAND` pointing at an agent or
+ * a specific key, `GIT_TERMINAL_PROMPT` deliberately enabled — already said
+ * how git should behave, so their value wins verbatim; an empty value counts
+ * as silence. `BatchMode=yes` turns every interactive SSH question into a
+ * fast failure, which surfaces as an install error instead of a spinner.
+ *
+ * @param env - the caller's environment.
+ * @returns the git non-interactivity variables the caller left unset.
+ */
+export function nonInteractiveGitEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const has = (name: string) => {
+    const wanted = name.toLowerCase()
+    return Object.keys(env).some(key => key.toLowerCase() === wanted && (env[key] ?? '').trim() !== '')
+  }
+  const out: NodeJS.ProcessEnv = {}
+  if (!has('GIT_TERMINAL_PROMPT')) out.GIT_TERMINAL_PROMPT = '0'
+  if (!has('GIT_SSH_COMMAND')) out.GIT_SSH_COMMAND = 'ssh -oBatchMode=yes'
+  return out
+}
+
+/**
  * Directories to append to PATH so a spawned pnpm can be found (#32, #38,
  * #167, #292).
  *
@@ -196,13 +231,21 @@ export function toolSearchDirs(
 
 function spawnEnv(): NodeJS.ProcessEnv {
   // pnpm v10+ blocks forever on a silent interactive prompt without a TTY;
-  // CI mode forces it to act or fail instead of asking.
+  // CI mode forces it to act or fail instead of asking. git (shelled out to
+  // for git-hosted specs pnpm cannot serve from codeload, #587) ignores CI
+  // entirely, so the non-interactivity variables it does read go with it.
   const separator = process.platform === 'win32' ? ';' : ':'
   const parts = (process.env.PATH ?? '').split(separator).filter(part => part !== '')
   for (const bin of toolSearchDirs()) {
     if (!parts.includes(bin)) parts.push(bin)
   }
-  return { ...process.env, ...proxyEnvForPnpm(process.env, activeRegion()), CI: 'true', PATH: parts.join(separator) }
+  return {
+    ...process.env,
+    ...proxyEnvForPnpm(process.env, activeRegion()),
+    CI: 'true',
+    ...nonInteractiveGitEnv(process.env),
+    PATH: parts.join(separator),
+  }
 }
 
 const INSTALL_TIMEOUT_MS = Number(process.env.DSH_MARKET_INSTALL_TIMEOUT_MS) || 15 * 60 * 1000
