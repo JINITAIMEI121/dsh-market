@@ -1,0 +1,57 @@
+name: sync-branch
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch of this fork to update"
+        required: true
+      upstream:
+        description: "Upstream repo (owner/name)"
+        required: true
+        default: "dsh-market/dsh-market"
+      upstream_branch:
+        description: "Upstream branch to merge"
+        required: true
+        default: "main"
+      rebuild_client:
+        description: "Rebuild client/ bundle after merge (true/false)"
+        required: true
+        default: "true"
+permissions:
+  contents: write
+concurrency:
+  group: sync-${{ inputs.branch }}
+  cancel-in-progress: true
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+      - name: Merge upstream
+        run: |
+          git remote add upstream "https://github.com/${{ inputs.upstream }}.git"
+          git fetch upstream "${{ inputs.upstream_branch }}"
+          git config user.name "JINITAIMEI121"
+          git config user.email "JINITAIMEI121@users.noreply.github.com"
+          git merge --no-edit "upstream/${{ inputs.upstream_branch }}"
+      - uses: actions/setup-node@v4
+        if: ${{ inputs.rebuild_client == 'true' }}
+        with:
+          node-version: 22
+      - name: Install and rebuild client bundle
+        if: ${{ inputs.rebuild_client == 'true' }}
+        run: |
+          npx pnpm install --no-frozen-lockfile
+          npx pnpm run build:client
+      - name: Commit rebuilt bundle
+        if: ${{ inputs.rebuild_client == 'true' }}
+        run: |
+          if ! git diff --quiet -- client/; then
+            git add client/
+            git commit -m "build(client): regenerate bundle against current main (banner normalization from upstream)"
+          fi
+      - name: Push
+        run: git push origin "${{ inputs.branch }}"
