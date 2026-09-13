@@ -487,14 +487,31 @@ export function mountMarketRoutes(
   }
 
   /**
-   * Apply one enable/disable request: persist the choice in state.json, then
-   * drive the live composition. Covers every mount form — hot mounts and
-   * client-only shims go through hotUnmount/hotMount, bundle-layer entries
-   * through setEntryDisabled. Enabling a THEME goes through the caller's
-   * activateTheme instead so the Themes tab's exclusivity stays intact.
+   * Apply one enable/disable request: drive the live composition, then
+   * persist the choice in state.json. Covers every mount form — hot mounts
+   * and client-only shims go through hotUnmount/hotMount, bundle-layer
+   * entries through setEntryDisabled. Enabling a THEME goes through the
+   * caller's activateTheme instead so the Themes tab's exclusivity stays
+   * intact.
+   *
+   * A FAILED ENABLE LEAVES EVERYTHING AS IT WAS (#575). The choice used to be
+   * recorded before the mount was attempted and persisted whatever happened,
+   * so enabling a plugin that crashes on import — deterministically, every
+   * time — wrote "enabled" into state.json anyway. The next boot tried the
+   * import again and died again; the reporter measured 24 restarts before
+   * restoring the disable by hand. The toggle route's patch-layer gate
+   * (@JINITAIMEI121 in #584) closed the same hole in cordis.patch.yml; this
+   * closes it in the market's own store, which is the ONLY durable state a
+   * client-only plugin has — that plugin kind has no bundle rows, so the
+   * patch gate never runs for it.
+   *
+   * A failed DISABLE still persists, and that asymmetry is deliberate: the
+   * user asked for OFF, and a failed unmount leaves the plugin live only for
+   * this session. There the durable disable is the contract, not an error.
    */
   async function setPluginEnabled(name: string, enabled: boolean): Promise<{ ok: boolean; reason?: string }> {
     const dir = activeProfileDir
+    const wasDisabled = disabled.has(name)
     if (enabled) disabled.delete(name)
     else disabled.add(name)
     let ok: boolean
@@ -521,6 +538,13 @@ export function mountMarketRoutes(
         // entry, or already off): the persisted flag is the contract.
         ok = true
       }
+    }
+    if (!ok && enabled) {
+      // Put the in-memory view back before persisting: it is the same object
+      // the route reports as `disabled`, so restoring it keeps the reply, the
+      // store and the patch layer telling one story.
+      if (wasDisabled) disabled.add(name)
+      logEvent('warn', 'toggle', `${name}: enable failed; leaving it disabled rather than persisting a state that crashes at boot (#575)`)
     }
     writeMarketState(dir, { disabled, groups, groupOrder })
     return { ok, reason }
@@ -2109,7 +2133,18 @@ export function mountMarketRoutes(
             }
           }
           let patchWrite: { ok: boolean; reason: string | null } | null = null
-          if (patchRows.length > 0) {
+          // #575: a failed ENABLE must not flip the durable patch layer.
+          // The hot-mount failure may be deterministic (a plugin that
+          // crashes on import), and persisting "enabled" turns a transient
+          // in-session error into a boot crash loop — the loader re-applies
+          // the flipped rows on every start. The frontend already shows the
+          // plugin as still disabled, and the next explicit enable retries
+          // cleanly. Disables keep their unconditional write: a failed
+          // unmount leaves the plugin live in-session, and the user asked
+          // for it OFF — the durable disable is then the contract, not an
+          // error.
+          const patchGate = ok || !enabled
+          if (patchRows.length > 0 && patchGate) {
             for (const rowId of patchRows) {
               const result = enabled ? await enableRow(userPatchPath, rowId) : await disableRow(userPatchPath, rowId)
               if (!result.ok && patchWrite === null) patchWrite = result
