@@ -35,6 +35,11 @@ jobs:
       - name: Commit and push
         run: |
           set -e
+          # Upstream deliberately does not track a lockfile; do not introduce one.
+          if ! git cat-file -e upstream/main:pnpm-lock.yaml 2>/dev/null; then
+            git rm -f --ignore-unmatch --cached pnpm-lock.yaml > /dev/null 2>&1 || true
+            rm -f pnpm-lock.yaml
+          fi
           git add -A
           git commit -m "fix(cli): make spawned git fail fast instead of waiting for prompts (#587)"
           git push --force origin fix/git-non-interactive-env
