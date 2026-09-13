@@ -40,6 +40,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			setSelfUpdateReady: "有新版本",
 			setSelfUpdateHint: "更新会下载新版本，重启后生效。",
 			setSelfUpToDateHint: "",
+			setSelfHostManagedHint: "这份市场由桌面宿主安装，新版本请在桌面端更新。",
 			setSelfUpdate: "更新",
 			setSelfUpdatedHint: "已下载完成。重启 DeepSeek Harness 后新版本才会生效——前端页面会立即更新，服务端不会。",
 			setRegion: "下载区域",
@@ -154,6 +155,8 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			updateFail: "更新失败",
 			upToDate: "已是最新",
 			linkedDev: "本地开发",
+			hostUpdateReady: "有新版本 {0}",
+			hostUpdateHint: "这份由桌面宿主安装和更新，市场只提醒，不在这里更新",
 			notesLink: "更新内容",
 			notesRelease: "版本说明",
 			notesCommits: "提交记录",
@@ -570,6 +573,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			setSelfUpdateReady: "New version available:",
 			setSelfUpdateHint: "Updating downloads the new version; it takes effect after a restart.",
 			setSelfUpToDateHint: "",
+			setSelfHostManagedHint: "This copy was installed by the desktop host; update it from the desktop app.",
 			setSelfUpdate: "Update",
 			setSelfUpdatedHint: "Downloaded. Restart DeepSeek Harness for it to take effect — the frontend updates at once, the server does not.",
 			setRegion: "Download region",
@@ -684,6 +688,8 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			updateFail: "Update failed",
 			upToDate: "Up to date",
 			linkedDev: "local",
+			hostUpdateReady: "New version {0}",
+			hostUpdateHint: "Installed and updated by the desktop host; the market only reports it",
 			notesLink: "What changed",
 			notesRelease: "Release notes",
 			notesCommits: "Commits",
@@ -1267,6 +1273,14 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		*/
 		function installedForCatalog(installed, bundles) {
 			return Object.fromEntries([...bundles.map((name) => [name, "*"]), ...Object.entries(installed)]);
+		}
+		/**
+		* A `link:` the desktop host wrote for one of its generations (#497). The
+		* test the server applies (`isGenerationLink` in sources.ts), repeated here
+		* because the client bundle cannot import server modules.
+		*/
+		function isGenerationSpec(spec) {
+			return /^link:/i.test(spec) && /(?:^|[\\/])\.generations[\\/]live[\\/]/i.test(spec);
 		}
 		function groupSwitchState(members, disabled) {
 			const list = members ?? [];
@@ -6441,6 +6455,14 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			const [visibleCatsOneRow, setVisibleCatsOneRow] = (0, react.useState)(null);
 			const catsWrapRef = (0, react.useRef)(null);
 			const [catsStuck, setCatsStuck] = (0, react.useState)(false);
+			/** While the sticky header is pinned, expansion is this flag — not
+			* `catsOpen`. Becoming stuck collapses on the SAME render (stuckExpanded
+			* starts false) instead of a follow-up `useLayoutEffect` that flipped
+			* `catsOpen` and forced a second commit; that delayed height change is
+			* what lined up with the host Settings dialog hitching after tab 收放.
+			* An explicit chevron click while stuck sets this true and keeps
+			* `catsOpen` in sync so unstuck restores the user's choice. */
+			const [stuckExpanded, setStuckExpanded] = (0, react.useState)(false);
 			const [catsSentinel, setCatsSentinel] = (0, react.useState)(null);
 			const refreshInstalled = (0, react.useCallback)((force) => {
 				fetch(api("/dsh-market/installed"), { cache: "no-store" }).then((res) => res.json()).then((body) => {
@@ -8502,7 +8524,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 					if (leftView && root !== null && wrap !== null) {
 						if (root.scrollHeight - root.clientHeight <= wrap.offsetHeight) return;
 					}
-					setCatsStuck(leftView);
+					setCatsStuck((prev) => prev === leftView ? prev : leftView);
 				}, {
 					root: bodyRef.current,
 					threshold: 0
@@ -8510,28 +8532,14 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 				observer.observe(catsSentinel);
 				return () => observer.disconnect();
 			}, [catsSentinel]);
-			/**
-			* Becoming stuck auto-collapses an open row — a REAL `catsOpen` flip, not
-			* a display-only override. An earlier version faked this by computing a
-			* separate "effectively open" value for rendering while leaving `catsOpen`
-			* itself true; the chevron's own click handler only ever toggled the real
-			* `catsOpen`, so while stuck it flipped a value the render path had
-			* already stopped consulting — clicking "expand" did nothing visible
-			* (reported: "吸顶滚动了之后，展开没反应了"). Driving the same state the
-			* chevron drives means the chevron always works, stuck or not.
-			*/
-			const catsAutoCollapsedRef = (0, react.useRef)(false);
-			(0, react.useLayoutEffect)(() => {
-				if (catsStuck) {
-					if (catsOpen) {
-						setCatsOpen(false);
-						catsAutoCollapsedRef.current = true;
-					}
-				} else if (catsAutoCollapsedRef.current) {
-					setCatsOpen(true);
-					catsAutoCollapsedRef.current = false;
-				}
+			(0, react.useEffect)(() => {
+				if (!catsStuck) setStuckExpanded(false);
 			}, [catsStuck]);
+			/** Expanded chips + chevron share one value. Stuck uses `stuckExpanded`
+			* so pinning collapses without rewriting `catsOpen` in a layout effect
+			* (see stuckExpanded state). Leaving stuck falls back to `catsOpen`,
+			* which still holds the pre-pin / in-pin user choice. */
+			const catsExpanded = catsStuck ? stuckExpanded : catsOpen;
 			/**
 			* A fresh install (hotUrls/hotNames) and a toggle/group action
 			* (refreshNames) both end in the same place — "reload the page" — and
@@ -8981,7 +8989,10 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 						className: Market_module_css_default.body,
 						ref: bodyRef,
-						onScroll: (e) => setShowTop(e.currentTarget.scrollTop > 400),
+						onScroll: (e) => {
+							const show = e.currentTarget.scrollTop > 400;
+							setShowTop((prev) => prev === show ? prev : show);
+						},
 						children: tab === "backup" ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: Market_module_css_default.backupGrid,
 							children: [
@@ -9263,8 +9274,8 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 											className: visibleCats === null ? `${Market_module_css_default.catsWrap} ${Market_module_css_default.catsCollapsed}` : Market_module_css_default.catsWrap,
 											children: (() => {
 												const budget = catsStuck ? visibleCatsOneRow : visibleCats;
-												const ordered = orderedCategories(categories, cat, catsOpen, budget);
-												const shown = catsOpen || budget === null ? ordered : ordered.slice(0, Math.max(0, budget - 1));
+												const ordered = orderedCategories(categories, cat, catsExpanded, budget);
+												const shown = catsExpanded || budget === null ? ordered : ordered.slice(0, Math.max(0, budget - 1));
 												return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
 													/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Pill, {
 														"data-chip": "1",
@@ -9282,11 +9293,12 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 														variant: "ghost",
 														size: "sm",
 														className: Market_module_css_default.catsToggle,
-														icon: catsOpen ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconChevronUpOutline14, { size: 14 }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconChevronDownOutline14, { size: 14 }),
-														"aria-label": catsOpen ? t("catsLess") : t("catsMore"),
+														icon: catsExpanded ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconChevronUpOutline14, { size: 14 }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconChevronDownOutline14, { size: 14 }),
+														"aria-label": catsExpanded ? t("catsLess") : t("catsMore"),
 														onClick: () => {
-															catsAutoCollapsedRef.current = false;
-															setCatsOpen((o) => !o);
+															const next = !catsExpanded;
+															if (catsStuck) setStuckExpanded(next);
+															setCatsOpen(next);
 														}
 													})
 												] });
@@ -9834,7 +9846,8 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 									const missing = pendingBackup !== null && !installedFiles.includes(name);
 									const entry = data === null ? void 0 : catalogEntryForInstalled(data.plugins, name, String(spec), repoIdentities[name], repoHints[name]);
 									const status = updates[name];
-									const localDev = /^(?:link|file):/i.test(String(spec)) || status?.kind === "linked";
+									const generation = status?.kind === "generation" || isGenerationSpec(String(spec));
+									const localDev = !generation && (/^(?:link|file):/i.test(String(spec)) || status?.kind === "linked");
 									const act = activations[name];
 									const meta = act !== void 0 ? activationMeta(act.state, t) : null;
 									const version = status && status.version ? "v" + status.version : "";
@@ -9955,7 +9968,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 														]
 													});
 												})(),
-												status !== void 0 && status.updateAvailable && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+												status !== void 0 && (status.updateAvailable || generation && status.latest != null) && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 													className: Market_module_css_default.noteRow,
 													children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 														type: "button",
@@ -10101,6 +10114,10 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 															className: Market_module_css_default.warnBtn,
 															disabled: true,
 															children: t("updating")
+														}) : status !== void 0 && generation && status.latest != null ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+															className: Market_module_css_default.metaTag,
+															title: t("hostUpdateHint"),
+															children: t("hostUpdateReady").replace("{0}", status.latest)
 														}) : status && status.updateAvailable ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 															variant: "primary",
 															size: "sm",
@@ -10740,7 +10757,8 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 				updateAvailable: own.updateAvailable === true,
 				latest: own.latest ?? null,
 				channelSwitch: own.channelSwitch ?? null,
-				restoreRequired: own.restoreRequired === true
+				restoreRequired: own.restoreRequired === true,
+				hostManaged: own.kind === "generation"
 			};
 		}
 		/**
@@ -10966,7 +10984,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			}, [post, t]);
 			/** One label + hint block with an optional action, the host's row shape. */
 			const row = (label, hint, action) => (0, react.createElement)("div", { className: Market_module_css_default.setRow }, (0, react.createElement)("div", { className: Market_module_css_default.setLabelBox }, (0, react.createElement)("div", { className: Market_module_css_default.setLabel }, label), (0, react.createElement)("div", { className: Market_module_css_default.setHint }, hint)), action);
-			const body = phase === "removed" ? row(t("setSelfRemoved"), t("setSelfRemovedHint"), null) : (0, react.createElement)(react.Fragment, null, status?.selfManaged === true ? row(update?.updateAvailable === true && update.latest !== null ? `${t("setSelfUpdateReady")} ${update.latest}` : update?.channelSwitch != null ? `${t("setChannelSwitch")} ${update.channelSwitch}` : t("setSelfUpToDate"), phase === "updated" ? t("setSelfUpdatedHint") : update?.channelSwitch != null ? t("setChannelSwitchHint") : update?.updateAvailable === true ? t("setSelfUpdateHint") : t("setSelfUpToDateHint"), phase === "updated" ? null : update?.updateAvailable === true ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+			const body = phase === "removed" ? row(t("setSelfRemoved"), t("setSelfRemovedHint"), null) : (0, react.createElement)(react.Fragment, null, status?.selfManaged === true ? row((update?.updateAvailable === true || update?.hostManaged === true) && update.latest !== null ? `${t("setSelfUpdateReady")} ${update.latest}` : update?.channelSwitch != null ? `${t("setChannelSwitch")} ${update.channelSwitch}` : t("setSelfUpToDate"), phase === "updated" ? t("setSelfUpdatedHint") : update?.channelSwitch != null ? t("setChannelSwitchHint") : update?.updateAvailable === true ? t("setSelfUpdateHint") : update?.hostManaged === true && update.latest !== null ? t("setSelfHostManagedHint") : t("setSelfUpToDateHint"), phase === "updated" ? null : update?.updateAvailable === true ? (0, react.createElement)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 				variant: "primary",
 				size: "sm",
 				disabled: busy,
