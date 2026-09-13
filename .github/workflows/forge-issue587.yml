@@ -30,7 +30,7 @@ jobs:
         run: |
           set -e
           corepack enable
-          npx pnpm install --frozen-lockfile
+          npx pnpm@9 install --no-frozen-lockfile
           npx vitest run tests/dsh-cli-spawn.spec.ts tests/dsh-cli.spec.ts tests/install.spec.ts
       - name: Commit and push
         run: |
