@@ -1,0 +1,44 @@
+name: forge-issue597
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Base on upstream main and apply the fix
+        run: |
+          set -e
+          git remote add upstream https://github.com/dsh-market/dsh-market.git
+          git fetch upstream main
+          git config user.name "JINITAIMEI121"
+          git config user.email "JINITAIMEI121@users.noreply.github.com"
+          git checkout -B fix/annotated-tag-latest upstream/main
+          echo 'ZGlmZiAtLWdpdCBhL3NyYy9hY2NlbGVyYXRlLnRzIGIvc3JjL2FjY2VsZXJhdGUudHMKLS0tIGEvc3JjL2FjY2VsZXJhdGUudHMKKysrIGIvc3JjL2FjY2VsZXJhdGUudHMKQEAgLTEzMiw2ICsxMzIsMTUgQEAgYXN5bmMgZnVuY3Rpb24gdHJ5SGVhZENvbW1pdCgKICAgICAvLyBtZXRhY2hhcmFjdGVycyAoYC5gIGlzIGxlZ2FsIGluIGEgYnJhbmNoIG5hbWUpLgogICAgIGNvbnN0IHF1b3RlZCA9IHJlZi5yZXBsYWNlKC9bLiorP14ke30oKXxbXF1cXF0vZ3UsIFN0cmluZy5yYXdgXCQmYCkKICAgICBmb3IgKGNvbnN0IG5hbWVzcGFjZSBvZiBbJ2hlYWRzJywgJ3RhZ3MnXSkgeworICAgICAgLy8gQW4gYW5ub3RhdGVkIHRhZyBhZHZlcnRpc2VzIHR3byByZWZzIOKAlCB0aGUgdGFnIG9iamVjdCBhbmQgaXRzCisgICAgICAvLyBwZWVsZWQgY29tbWl0IChgcmVmcy90YWdzLzxyZWY+Xnt9YCkuIHBucG0gcmVzb2x2ZXMgdGhlIHRhZyB0byB0aGUKKyAgICAgIC8vIHBlZWxlZCBjb21taXQgYW5kIGNvZGVsb2FkIHJlY29yZHMgdGhhdCBzaGEgaW4gdGhlIGxvY2tmaWxlLCBzbyB0aGUKKyAgICAgIC8vIHBlZWxlZCBsaW5lIGlzIHRoZSBvbmUgdGhhdCBtdXN0IGVxdWFsIGBjdXJyZW50YDsgYW5zd2VyaW5nIHdpdGgKKyAgICAgIC8vIHRoZSB0YWctb2JqZWN0IHNoYSBtYWRlIGFubm90YXRlZC10YWcgaW5zdGFsbHMgcmVwb3J0IGFuIHVwZGF0ZQorICAgICAgLy8gZm9yZXZlciAoIzU5NykuIExpZ2h0d2VpZ2h0IHRhZ3MgaGF2ZSBubyBwZWVsZWQgbGluZSBhbmQgZmFsbAorICAgICAgLy8gdGhyb3VnaCB0byB0aGUgZGlyZWN0IG9uZS4KKyAgICAgIGNvbnN0IHBlZWxlZCA9IG5ldyBSZWdFeHAoU3RyaW5nLnJhd2AoWzAtOWEtZl17NDB9KSByZWZzLyR7bmFtZXNwYWNlfS8ke3F1b3RlZH1cXlx7XH0oPyFbXlxzXSlgLCAndScpLmV4ZWMoYm9keSkKKyAgICAgIGlmIChwZWVsZWQgIT09IG51bGwpIHJldHVybiB7IGtpbmQ6ICd2YWxpZCcsIHNoYTogcGVlbGVkWzFdISB9CiAgICAgICBjb25zdCBmb3VuZCA9IG5ldyBSZWdFeHAoU3RyaW5nLnJhd2AoWzAtOWEtZl17NDB9KSByZWZzLyR7bmFtZXNwYWNlfS8ke3F1b3RlZH0oPyFbXlxzXSlgLCAndScpLmV4ZWMoYm9keSkKICAgICAgIGlmIChmb3VuZCAhPT0gbnVsbCkgcmV0dXJuIHsga2luZDogJ3ZhbGlkJywgc2hhOiBmb3VuZFsxXSEgfQogICAgIH0K' | base64 -d > /tmp/src.patch
+          echo 'ZGlmZiAtLWdpdCBhL3Rlc3RzL2FjY2VsZXJhdGUuc3BlYy50cyBiL3Rlc3RzL2FjY2VsZXJhdGUuc3BlYy50cwotLS0gYS90ZXN0cy9hY2NlbGVyYXRlLnNwZWMudHMKKysrIGIvdGVzdHMvYWNjZWxlcmF0ZS5zcGVjLnRzCkBAIC0xNTgsMyArMTU4LDQ3IEBAIGRlc2NyaWJlKCdhY2NlbGVyYXRlZFRhcmdldCcsICgpID0+IHsKICAgICBleHBlY3Qoc2VlbikudG9IYXZlTGVuZ3RoKDIpCiAgIH0pCiB9KQorCisvKiogQnVpbGQgb25lIHBrdC1saW5lIG9mIGEgZ2l0IHJlZiBhZHZlcnRpc2VtZW50LiAqLworZnVuY3Rpb24gcGt0KGxpbmU6IHN0cmluZyk6IHN0cmluZyB7CisgIHJldHVybiBgJHsoNCArIGxpbmUubGVuZ3RoKS50b1N0cmluZygxNikucGFkU3RhcnQoNCwgJzAnKX0ke2xpbmV9XG5gCit9CisKKy8qKgorICogQSBnaXQgcmVmIGFkdmVydGlzZW1lbnQgY2Fycnlpbmcgb25lIHRhZy4gQW5ub3RhdGVkIHRhZ3MgKHRhZ09iamVjdCBzZXQpCisgKiBhZHZlcnRpc2UgdGhlIHRhZyBvYmplY3QgQU5EIGl0cyBwZWVsZWQgY29tbWl0OyBsaWdodHdlaWdodCB0YWdzIG9ubHkgdGhlCisgKiBkaXJlY3QgbGluZS4KKyAqLworZnVuY3Rpb24gdGFnQWR2ZXJ0aXNlbWVudChjb21taXQ6IHN0cmluZywgdGFnOiBzdHJpbmcsIHRhZ09iamVjdD86IHN0cmluZyk6IHN0cmluZyB7CisgIGNvbnN0IGxpbmVzID0gWworICAgICcjIHNlcnZpY2U9Z2l0LXVwbG9hZC1wYWNrJywKKyAgICBgJHtjb21taXR9IEhFQURcMG11bHRpX2FjayB0aGluLXBhY2sgc2lkZS1iYW5kIHNpZGUtYmFuZC02NGsgb2ZzLWRlbHRhYCwKKyAgICBgJHtjb21taXR9IHJlZnMvaGVhZHMvbWFpbmAsCisgICAgYCR7dGFnT2JqZWN0ID8/IGNvbW1pdH0gcmVmcy90YWdzLyR7dGFnfWAsCisgIF0KKyAgaWYgKHRhZ09iamVjdCAhPT0gdW5kZWZpbmVkKSBsaW5lcy5wdXNoKGAke2NvbW1pdH0gcmVmcy90YWdzLyR7dGFnfV57fWApCisgIHJldHVybiAnMDAxZSMgc2VydmljZT1naXQtdXBsb2FkLXBhY2tcbjAwMDAnICsgbGluZXMubWFwKHBrdCkuam9pbignJykgKyAnMDAwMCcKK30KKworZGVzY3JpYmUoJ3RhZyByZWYgcmVzb2x1dGlvbiAoIzU5NyknLCAoKSA9PiB7CisgIGFmdGVyRWFjaCgoKSA9PiB7IHZpLnVuc3R1YkFsbEdsb2JhbHMoKTsgcmVzZXRHaXRodWJSb3V0ZVByZWZlcmVuY2VzKCkgfSkKKworICBpdCgncHJlZmVycyB0aGUgcGVlbGVkIGNvbW1pdCBmb3IgYW4gYW5ub3RhdGVkIHRhZywgbmV2ZXIgdGhlIHRhZyBvYmplY3QnLCBhc3luYyAoKSA9PiB7CisgICAgY29uc3QgdGFnT2JqZWN0ID0gJzc2OWVjNWUwOTNmYjU4ZDY5NGZhOGRiMDlhNWQ1NTU0Njk2NDZiNDknCisgICAgY29uc3QgY29tbWl0ID0gJ2EzMzQxZWMyYjI4ZTNmYjNiNWZjMzU2OTAxMmZjMzlhY2FjYzlmYjInCisgICAgdmkuc3R1Ykdsb2JhbCgnZmV0Y2gnLCB2aS5mbihhc3luYyAoKSA9PiBuZXcgUmVzcG9uc2UodGFnQWR2ZXJ0aXNlbWVudChjb21taXQsICd2MC4xLjUnLCB0YWdPYmplY3QpLCB7IHN0YXR1czogMjAwIH0pKSkKKyAgICBhd2FpdCBleHBlY3QocmVzb2x2ZUhlYWRDb21taXQoJ28vcicsICdjaGluYScsIHt9LCAndjAuMS41JykpLnJlc29sdmVzLnRvQmUoY29tbWl0KQorICB9KQorCisgIGl0KCd1c2VzIHRoZSBkaXJlY3QgbGluZSB3aGVuIHRoZSB0YWcgaXMgbGlnaHR3ZWlnaHQgKG5vIHBlZWxlZCBsaW5lIGV4aXN0cyknLCBhc3luYyAoKSA9PiB7CisgICAgY29uc3QgY29tbWl0ID0gJ2EzMzQxZWMyYjI4ZTNmYjNiNWZjMzU2OTAxMmZjMzlhY2FjYzlmYjInCisgICAgdmkuc3R1Ykdsb2JhbCgnZmV0Y2gnLCB2aS5mbihhc3luYyAoKSA9PiBuZXcgUmVzcG9uc2UodGFnQWR2ZXJ0aXNlbWVudChjb21taXQsICd2MC4xLjUnKSwgeyBzdGF0dXM6IDIwMCB9KSkpCisgICAgYXdhaXQgZXhwZWN0KHJlc29sdmVIZWFkQ29tbWl0KCdvL3InLCAnY2hpbmEnLCB7fSwgJ3YwLjEuNScpKS5yZXNvbHZlcy50b0JlKGNvbW1pdCkKKyAgfSkKKworICBpdCgnc3RpbGwgYW5jaG9ycyB0aGUgdGFnIG5hbWU6IGBwdWJsaXNoYCBuZXZlciBtYXRjaGVzIGBwdWJsaXNoLW9sZGAnLCBhc3luYyAoKSA9PiB7CisgICAgY29uc3QgY29tbWl0ID0gJ2EzMzQxZWMyYjI4ZTNmYjNiNWZjMzU2OTAxMmZjMzlhY2FjYzlmYjInCisgICAgdmkuc3R1Ykdsb2JhbCgnZmV0Y2gnLCB2aS5mbihhc3luYyAoKSA9PiBuZXcgUmVzcG9uc2UodGFnQWR2ZXJ0aXNlbWVudChjb21taXQsICdwdWJsaXNoLW9sZCcpLCB7IHN0YXR1czogMjAwIH0pKSkKKyAgICBhd2FpdCBleHBlY3QocmVzb2x2ZUhlYWRDb21taXQoJ28vcicsICdjaGluYScsIHt9LCAncHVibGlzaCcpKS5yZXNvbHZlcy50b0JlTnVsbCgpCisgIH0pCit9KQo=' | base64 -d > /tmp/spec.patch
+          git apply /tmp/src.patch
+          git apply /tmp/spec.patch
+      - name: Install and test
+        run: |
+          set -e
+          corepack enable
+          npx pnpm@9 install --no-frozen-lockfile
+          npx vitest run tests/accelerate.spec.ts tests/changelog.spec.ts tests/catalog-npm.spec.ts
+      - name: Commit and push
+        run: |
+          set -e
+          if ! git cat-file -e upstream/main:pnpm-lock.yaml 2>/dev/null; then
+            git rm -f --ignore-unmatch --cached pnpm-lock.yaml > /dev/null 2>&1 || true
+            rm -f pnpm-lock.yaml
+          fi
+          git add -A
+          git commit -m "fix(accelerate): resolve annotated tags to their peeled commit when comparing (#597)"
+          git push --force origin fix/annotated-tag-latest
