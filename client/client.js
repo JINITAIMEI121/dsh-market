@@ -1591,10 +1591,20 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		* dependency's spec pins a github repo AND the entry states one, the repos
 		* decide — the loose name/npm identities only apply when at least one side
 		* carries no repo evidence (npm installs, non-github entries).
+		*
+		* Repo evidence only ever decides by repository ROOT. A monorepo catalog
+		* entry states `owner/repo#path:/pkg` while an npm-installed manifest
+		* usually states the bare `owner/repo` (it rarely declares
+		* `repository.directory`), and reading that asymmetry as a source conflict
+		* kept a genuinely installed subpackage from ever reading as installed.
 		*/
+		/** Repository root: the part before any `#path:/…` subpath selection. */
+		function repoRoots(ids) {
+			return new Set([...ids].map((id) => id.split("#path:/")[0]));
+		}
 		function sameSourceConflict(plugin, spec, repoIdentities = []) {
-			const entry = entryRepoIds(plugin);
-			const dep = depRepoIds(spec, repoIdentities);
+			const entry = repoRoots(entryRepoIds(plugin));
+			const dep = repoRoots(depRepoIds(spec, repoIdentities));
 			if (entry.size === 0 || dep.size === 0) return false;
 			for (const id of dep) if (entry.has(id)) return false;
 			return true;
@@ -1645,6 +1655,56 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			for (const id of entryIdentities(plugin)) if (dep.has(id)) return true;
 			return false;
 		}
+		/**
+		* The same memo, for the branch #262 left behind (#589).
+		*
+		* `looseMatchCount` above covers dependencies installed by version. A
+		* `link:` or `file:` dependency takes the other branch, into
+		* `findCatalogEntryForLocal`, which walks the whole catalog at least twice
+		* per call — once to filter by name, once to collect `/tree/` repos — and
+		* up to twice more when there are identities to probe. Both callers below
+		* run once per rendered card. The reporter profiled ~300ms per repaint at
+		* 24 cards against a 3,627-entry catalog where a version-pinned dependency
+		* paid 1.1ms; a local benchmark measured ~38ms per render at that shape,
+		* and ~1.4s at 96 cards with eight local dependencies.
+		*
+		* The inner key carries the EVIDENCE, not just the name. Installing a plugin
+		* hands the next render a fresh identities array while the catalog array
+		* stays the same, so a name-only key would answer the post-install question
+		* with the pre-install result — which is the same-named-fork confusion #485
+		* asked this matcher to stop making, reintroduced as a cache bug.
+		*
+		* A miss is cached as `null`, which is why the "not cached yet" sentinel
+		* has to be `undefined`: `null` is a real answer here, and it costs the
+		* same full scan to establish as a hit does. It is also the common case —
+		* a checkout you are developing is usually not in the catalog at all.
+		*
+		* The invariant this rests on, stated because the WeakMap cannot enforce it:
+		* the catalog array and the entries inside it are frozen once handed here. A
+		* refetch replaces the array — which is what the outer key is for — but an
+		* in-place `push`, `sort` or `reverse`, or editing a row's `url`, would keep
+		* the key and change the answer. Order is load-bearing too: the matcher
+		* returns the FIRST row that fits. Nothing in the client does any of this
+		* today; `visiblePlugins` and `themePlugins` both sort copies.
+		*/
+		const localMatchCache = /* @__PURE__ */ new WeakMap();
+		function cachedEntryForLocal(plugins, name, identities, hints) {
+			let byKey = localMatchCache.get(plugins);
+			if (byKey === void 0) {
+				byKey = /* @__PURE__ */ new Map();
+				localMatchCache.set(plugins, byKey);
+			}
+			const key = JSON.stringify([
+				name,
+				identities,
+				hints
+			]);
+			const hit = byKey.get(key);
+			if (hit !== void 0) return hit;
+			const entry = findCatalogEntryForLocal(plugins, name, identities, hints);
+			byKey.set(key, entry);
+			return entry;
+		}
 		/** The installed dependency name a registry entry corresponds to, or null. */
 		function matchInstalledName(plugin, installed, repoIdentities = {}, plugins, repoHints = {}) {
 			const ids = entryIdentities(plugin);
@@ -1653,7 +1713,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 				const repos = repoIdentities[name] ?? [];
 				if (/^(?:link|file):/i.test(specStr)) {
 					if (plugins === void 0) continue;
-					const entry = findCatalogEntryForLocal(plugins, name, repos, repoHints[name] ?? []);
+					const entry = cachedEntryForLocal(plugins, name, repos, repoHints[name] ?? []);
 					if (entry !== null && entry.url === plugin.url) return name;
 					continue;
 				}
@@ -2055,7 +2115,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		}
 		/** Catalog row for an installed dependency — strict for local link:/file: specs. */
 		function catalogEntryForInstalled(plugins, name, spec, repoIdentities = [], repoHints = []) {
-			if (/^(?:link|file):/i.test(spec)) return findCatalogEntryForLocal(plugins, name, repoIdentities, repoHints) ?? void 0;
+			if (/^(?:link|file):/i.test(spec)) return cachedEntryForLocal(plugins, name, repoIdentities, repoHints) ?? void 0;
 			return entryForDep(plugins, name, spec, repoIdentities, repoHints);
 		}
 		//#endregion
@@ -8614,7 +8674,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 											children: updatingName === self ? t("updating") : status.restoreRequired === true ? t("restoreOnline") : t("marketUpdate")
 										});
 									})(),
-									reminderBatchUpdatableNames.length >= 2 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+									reminderBatchUpdatableNames.length >= 1 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
 										variant: "primary",
 										size: "sm",
 										disabled: updatingAll || updatingName !== null || busyUrl !== null || removingName !== null,
