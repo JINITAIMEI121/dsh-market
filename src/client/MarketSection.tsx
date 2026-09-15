@@ -3249,8 +3249,8 @@ export function MarketSection(props: MarketSectionProps) {
   }, [autoBackup, runWebdav, webdavUrl, webdavUser])
 
   // #558: count restart-pending session changes (restartNames), not every
-  // completed change, so the banner agrees with the host-side count for the
-  // same set instead of jumping between the two when the session is lost.
+  // completed `updatedNames` entry (which would double-count a batch update
+  // that reports both a done URL and a name for the same plugin).
   const sessionPendingRestart = doneUrls.length + restartNames.length + removedCount + toggleRestart + (backupRestored ? 1 : 0)
   /**
    * Plugins the HOST reports as restart-pending, independent of what this
@@ -3763,7 +3763,7 @@ export function MarketSection(props: MarketSectionProps) {
                 >{updatingName === self ? t('updating') : status.restoreRequired === true ? t('restoreOnline') : t('marketUpdate')}</Button>
               )
           })()}
-          {reminderBatchUpdatableNames.length >= 2 && (
+          {reminderBatchUpdatableNames.length >= 1 && (
             <Button
               variant="primary"
               size="sm"
